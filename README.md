@@ -15,6 +15,6 @@ green-cloud-migration/
 ```
 
 ## Yêu cầu môi trường
-- Python 3.9+
+- Python 3.14+
 - Linux (Ubuntu 20.04/22.04 khuyến nghị để hỗ trợ đầy đủ `tc netem`)
 - Docker & Docker Compose
