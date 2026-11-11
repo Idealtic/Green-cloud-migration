@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Environment & Editor
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Heavy captures & Large traces
+*.pcapng
+results/pcap/*.pcap
+!results/pcap/.gitkeep
+!results/pcap/kb5_sample.pcap
+
+# Temporary simulation outputs
+*.log
