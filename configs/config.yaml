@@ -1,0 +1,16 @@
+# Global system configuration for 3 Data Centers and Pipeline
+data_centers:
+  dc1:
+    ip: "10.0.1.2"
+    role: "source"
+  dc2:
+    ip: "10.0.2.2"
+    role: "target"
+  dc3:
+    ip: "10.0.3.2"
+    role: "target"
+
+pipeline:
+  workload_size_mb: 100
+  interval_seconds: 5
+  hysteresis_threshold: 0.15
