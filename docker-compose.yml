@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  dc1_hanoi:
+    image: python:3.10-slim
+    container_name: dc1_hanoi
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && tail -f /dev/null"
+    networks:
+      inter_dc_net:
+        ipv4_address: 10.0.1.10
+
+  dc2_danang:
+    image: python:3.10-slim
+    container_name: dc2_danang
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && tail -f /dev/null"
+    networks:
+      inter_dc_net:
+        ipv4_address: 10.0.1.20
+
+  dc3_tphcm:
+    image: python:3.10-slim
+    container_name: dc3_tphcm
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && tail -f /dev/null"
+    networks:
+      inter_dc_net:
+        ipv4_address: 10.0.1.30
+
+networks:
+  inter_dc_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
