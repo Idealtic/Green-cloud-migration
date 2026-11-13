@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # Router ảo kết nối và định tuyến giữa 3 Data Center (Nhiệm vụ của Đình Giang)
+  router:
+    image: python:3.10-slim
+    container_name: router
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iptables && tail -f /dev/null"
+    networks:
+      net_dc1:
+        ipv4_address: 10.0.1.1
+      net_dc2:
+        ipv4_address: 10.0.2.1
+      net_dc3:
+        ipv4_address: 10.0.3.1
+
+  # Data Center 1 (Source)
+  dc1:
+    image: python:3.10-slim
+    container_name: dc1
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && ip route del default && ip route add default via 10.0.1.1 && tail -f /dev/null"
+    networks:
+      net_dc1:
+        ipv4_address: 10.0.1.2
+
+  # Data Center 2 (Target 1)
+  dc2:
+    image: python:3.10-slim
+    container_name: dc2
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && ip route del default && ip route add default via 10.0.2.1 && tail -f /dev/null"
+    networks:
+      net_dc2:
+        ipv4_address: 10.0.2.2
+
+  # Data Center 3 (Target 2 - Green Destination)
+  dc3:
+    image: python:3.10-slim
+    container_name: dc3
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "apt-get update && apt-get install -y iproute2 iputils-ping iptables iperf3 && ip route del default && ip route add default via 10.0.3.1 && tail -f /dev/null"
+    networks:
+      net_dc3:
+        ipv4_address: 10.0.3.2
+
+# 3 Dải mạng riêng biệt cho 3 Data Center
+networks:
+  net_dc1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+  net_dc2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+  net_dc3:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
