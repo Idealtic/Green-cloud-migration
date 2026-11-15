@@ -1,0 +1,255 @@
+# =====================================================================
+# Topology: 3 Data Center + 4 Router WAN (r4 = Firewall) + 3 Switch LAN
+#
+#   dc1 --SW1-- r1 --wan_14--+
+#                            |
+#   dc2 --SW2-- r2 --wan_24--+-- r4 (FIREWALL, trung tâm)
+#                            |
+#   dc3 --SW3-- r3 --wan_34--+
+#
+# Địa chỉ DC khớp config.yaml:
+#   dc1 10.0.1.2 (source) | dc2 10.0.2.2 (target) | dc3 10.0.3.2 (target)
+#
+# Mọi luồng giữa các DC đều đi qua r4 để firewall có tác dụng.
+# =====================================================================
+
+services:
+  # ================= 3 DATA CENTERS =================
+  dc1:
+    build: .
+    container_name: dc1
+    hostname: dc1
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DC_ID=dc1
+      - DC_IP=10.0.1.2
+      - DC_ROLE=source
+    volumes:
+      - .:/app            # chứa config.yaml + code của cả nhóm
+    networks:
+      dc1_lan:
+        ipv4_address: 10.0.1.2
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.2.0/24 via 10.0.1.1 &&
+      ip route replace 10.0.3.0/24 via 10.0.1.1 &&
+      ip route replace 10.10.0.0/16 via 10.0.1.1 &&
+      sleep infinity
+      "
+
+  dc2:
+    build: .
+    container_name: dc2
+    hostname: dc2
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DC_ID=dc2
+      - DC_IP=10.0.2.2
+      - DC_ROLE=target
+    volumes:
+      - .:/app
+    networks:
+      dc2_lan:
+        ipv4_address: 10.0.2.2
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.1.0/24 via 10.0.2.1 &&
+      ip route replace 10.0.3.0/24 via 10.0.2.1 &&
+      ip route replace 10.10.0.0/16 via 10.0.2.1 &&
+      sleep infinity
+      "
+
+  dc3:
+    build: .
+    container_name: dc3
+    hostname: dc3
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DC_ID=dc3
+      - DC_IP=10.0.3.2
+      - DC_ROLE=target
+    volumes:
+      - .:/app
+    networks:
+      dc3_lan:
+        ipv4_address: 10.0.3.2
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.1.0/24 via 10.0.3.1 &&
+      ip route replace 10.0.2.0/24 via 10.0.3.1 &&
+      ip route replace 10.10.0.0/16 via 10.0.3.1 &&
+      sleep infinity
+      "
+
+  # ================= 4 ROUTER WAN + FIREWALL =================
+  r1:
+    build: .
+    container_name: router-r1
+    hostname: r1
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+    networks:
+      dc1_lan:
+        ipv4_address: 10.0.1.1
+      wan_14:
+        ipv4_address: 10.10.14.1
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.2.0/24 via 10.10.14.4 &&
+      ip route replace 10.0.3.0/24 via 10.10.14.4 &&
+      ip route replace 10.10.24.0/24 via 10.10.14.4 &&
+      ip route replace 10.10.34.0/24 via 10.10.14.4 &&
+      sleep infinity
+      "
+
+  r2:
+    build: .
+    container_name: router-r2
+    hostname: r2
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+    networks:
+      dc2_lan:
+        ipv4_address: 10.0.2.1
+      wan_24:
+        ipv4_address: 10.10.24.2
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.1.0/24 via 10.10.24.4 &&
+      ip route replace 10.0.3.0/24 via 10.10.24.4 &&
+      ip route replace 10.10.14.0/24 via 10.10.24.4 &&
+      ip route replace 10.10.34.0/24 via 10.10.24.4 &&
+      sleep infinity
+      "
+
+  r3:
+    build: .
+    container_name: router-r3
+    hostname: r3
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+    networks:
+      dc3_lan:
+        ipv4_address: 10.0.3.1
+      wan_34:
+        ipv4_address: 10.10.34.3
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.1.0/24 via 10.10.34.4 &&
+      ip route replace 10.0.2.0/24 via 10.10.34.4 &&
+      ip route replace 10.10.14.0/24 via 10.10.34.4 &&
+      ip route replace 10.10.24.0/24 via 10.10.34.4 &&
+      sleep infinity
+      "
+
+  # r4 = router trung tâm + FIREWALL
+  # Chính sách: mặc định DROP, chỉ cho phép
+  #   1) gói thuộc kết nối đã thiết lập (ESTABLISHED, RELATED)
+  #   2) mọi giao thức giữa các mạng DC (10.0.0.0/16 <-> 10.0.0.0/16)
+  #   3) ICMP trong dải 10.0.0.0/8 (để ping/traceroute chẩn đoán)
+  # Ví dụ bị chặn: TCP/UDP khởi tạo từ IP WAN của router (10.10.x.x) đi qua r4.
+  # Xem bộ đếm gói: docker exec router-r4-firewall iptables -L FORWARD -v -n
+  r4:
+    build: .
+    container_name: router-r4-firewall
+    hostname: r4
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+    networks:
+      wan_14:
+        ipv4_address: 10.10.14.4
+      wan_24:
+        ipv4_address: 10.10.24.4
+      wan_34:
+        ipv4_address: 10.10.34.4
+    command: >
+      bash -c "
+      sleep 2 &&
+      ip route replace 10.0.1.0/24 via 10.10.14.1 &&
+      ip route replace 10.0.2.0/24 via 10.10.24.2 &&
+      ip route replace 10.0.3.0/24 via 10.10.34.3 &&
+      iptables -F FORWARD &&
+      iptables -P FORWARD DROP &&
+      iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT &&
+      iptables -A FORWARD -s 10.0.0.0/16 -d 10.0.0.0/16 -j ACCEPT &&
+      iptables -A FORWARD -p icmp -s 10.0.0.0/8 -d 10.0.0.0/8 -j ACCEPT &&
+      sleep infinity
+      "
+
+# ================= SWITCHES (LAN) & WAN LINKS =================
+# Mỗi bridge network đóng vai trò 1 switch / 1 đường truyền.
+# Tên bridge đặt cố định để Wireshark/tcpdump trên host bắt gói dễ hơn.
+networks:
+  dc1_lan:                      # Switch SW1
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-sw1
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+          gateway: 10.0.1.254
+  dc2_lan:                      # Switch SW2
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-sw2
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+          gateway: 10.0.2.254
+  dc3_lan:                      # Switch SW3
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-sw3
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
+          gateway: 10.0.3.254
+  wan_14:                       # Link WAN r1 <-> r4
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-wan14
+    ipam:
+      config:
+        - subnet: 10.10.14.0/24
+          gateway: 10.10.14.254
+  wan_24:                       # Link WAN r2 <-> r4
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-wan24
+    ipam:
+      config:
+        - subnet: 10.10.24.0/24
+          gateway: 10.10.24.254
+  wan_34:                       # Link WAN r3 <-> r4
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-wan34
+    ipam:
+      config:
+        - subnet: 10.10.34.0/24
+          gateway: 10.10.34.254

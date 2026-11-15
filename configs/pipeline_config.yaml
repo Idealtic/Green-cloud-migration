@@ -1,0 +1,80 @@
+# configs/pipeline_config.yaml 
+#
+# QUY ƯỚC: IP, role, workload_size_mb, interval_seconds, hysteresis_threshold
+# nằm ở configs/config.yaml. File này KHÔNG lặp lại chúng, chỉ chứa tham số
+# thực nghiệm / tích hợp riêng của src/pipeline.py.
+
+experiment:
+  iterations: 5                 # lần lặp 1..5 (khớp CSV_HEADER.iteration)
+  snapshots_per_iteration: 4    # số chu kỳ quyết định trong 1 lần lặp
+  strategies: [Proposed, Baseline_A, Baseline_B]
+  seed: 42                      # seed cho chế độ mock (tái lập kết quả)
+  sim_start: "2026-06-21T06:00:00+00:00"  # mốc thời gian giả lập đưa vào predict_green_energy
+  sim_step_seconds: 3600        # mỗi chu kỳ tiến 1 giờ giả lập (để thấy nắng/gió đổi)
+
+# Ví dụ khi đã chốt:  netem_cmd: "bash scripts/tc_netem.sh {scenario}"
+scenarios:
+  KB1:
+    description: "Mạng lý tưởng"
+    netem_cmd: null
+  KB2:
+    description: "Băng thông thấp / bottleneck"
+    netem_cmd: null
+  KB3:
+    description: "RTT cao"
+    netem_cmd: null
+  KB4:
+    description: "Workload thay đổi kích thước"
+    workload_sizes_mb: [100, 500, 1000]   # 100MB, 500MB, 1GB (đối chiếu d_trans = L/R)
+    netem_cmd: null
+  KB5:
+    description: "Lưu lượng nền iperf3"
+    netem_cmd: null
+    background_start_cmd: null            # ví dụ: "bash scripts/run_background_traffic.sh start"
+    background_stop_cmd: null             # ví dụ: "bash scripts/run_background_traffic.sh stop"
+
+# Tham số override cho decide_proposed (Hoàng). Để trống = dùng
+# DEFAULT_OBJECTIVE_PARAMS trong src/objective.py (tránh lệch mặc định giữa 2 nơi).
+# hysteresis_threshold lấy từ config.yaml và CHỈ gắn cho Proposed;
+# Baseline_A/B luôn nhận params=None.
+# Ví dụ khi muốn thử trọng số:  decision_params: {alpha: 0.6, beta: 0.4}
+decision_params: {}
+
+# Hạ tầng Docker (chế độ --mode docker). Tên container khớp docker-compose.yml.
+docker:
+  containers:
+    dc1: dc1
+    dc2: dc2
+    dc3: dc3
+  repo_mount: /app
+
+# Đo mạng trước mỗi chu kỳ quyết định (chạy trong container nguồn)
+probe:
+  ping_count: 10
+  ping_interval_s: 0.2
+  iperf_port: 5201              # cổng riêng cho đo; lưu lượng nền KB5 dùng cổng khác
+  iperf_seconds: 3
+  loaded_ping_count: 8          # ping đồng thời với iperf3 để đo queue delay (8 x 0.2s < iperf_seconds - 1)
+  unreachable_rtt_ms: 1000.0
+  min_throughput_mbps: 0.1      # tránh chia 0 khi iperf3 lỗi
+  # NetworkMetrics của chính DC hiện tại. rtt_ms = 0 theo quy ước trong baselines.py
+  # (DC nguồn đo tới chính nó = 0 ms, nên Baseline B ở lại khi không DC nào tốt hơn).
+  local: {rtt_ms: 0.0, throughput_mbps: 1000.0, packet_loss_rate: 0.0}
+
+# Truyền workload bằng sender/receiver của Phú.
+# GIẢ ĐỊNH (cần chốt với Phú): sender in ra dòng JSON cuối cùng trên stdout, gồm
+#   rtt_ms, throughput_mbps, migration_time_s  (và tùy chọn packet_loss_rate).
+# Nếu CLI thực tế khác, chỉ cần sửa 2 lệnh dưới đây, không phải sửa pipeline.py.
+transfer:
+  port: 5001
+  receiver_cmd: "python3 /app/src/receiver.py --port {port}"
+  sender_cmd: "python3 /app/src/sender.py --host {host} --port {port} --size-mb {size_mb:g}"
+  receiver_startup_s: 1.0
+  timeout_s: 900
+
+# Chế độ mock: nhiễu ±noise quanh số liệu mẫu để có dao động (thử hysteresis)
+mock:
+  noise: 0.25
+
+output:
+  csv_dir: results/csv          # kb1.csv ... kb5.csv; chế độ mock ghi kbN_mock.csv
