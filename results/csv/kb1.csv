@@ -1,0 +1,7 @@
+timestamp,iteration,scenario,strategy,current_dc,decision,target_dc,workload_size_mb,rtt_ms,throughput_mbps,migration_time_s,packet_loss_rate,green_energy_kw,ping_pong_count
+2026-11-22T03:47:21+00:00,1,KB1,Proposed,dc1,STAY,dc1,100.0,0.0,1000.0,0.0,0.0,14.5184,0
+2026-11-22T03:47:21+00:00,1,KB1,Baseline_A,dc1,STAY,dc1,100.0,0.0,1000.0,0.0,0.0,14.5184,0
+2026-11-22T03:47:21+00:00,1,KB1,Baseline_B,dc1,STAY,dc1,100.0,0.0,1000.0,0.0,0.0,14.5184,0
+2026-11-22T03:47:33+00:00,1,KB1,Proposed,dc1,STAY,dc1,100.0,0.0,1000.0,0.0,0.0,27.4982,0
+2026-11-22T03:47:34+00:00,1,KB1,Baseline_A,dc1,MIGRATE,dc2,100.0,0.2928,18245.9477,0.0438,0.0,28.4595,0
+2026-11-22T03:47:34+00:00,1,KB1,Baseline_B,dc1,STAY,dc1,100.0,0.0,1000.0,0.0,0.0,27.4982,0
