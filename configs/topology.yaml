@@ -1,0 +1,69 @@
+# =====================================================================
+# configs/topology.yaml — Hồ sơ topology mạng 3 DC + 4 router
+# Phụ trách: Nguyễn Đình Giang
+# Mục đích: tài liệu hóa IP, định tuyến, firewall và cấu hình netem.
+# Nguồn sự thật để chạy hệ thống vẫn là docker-compose.yml (Huệ Chi);
+# file này phải khớp với nó. Dùng làm số liệu cho báo cáo mục 2.3.1 / 2.4.2.
+# =====================================================================
+
+subnets:
+  dc1_lan: {cidr: 10.0.1.0/24,   role: "LAN của DC1 (switch SW1)", docker_gateway: 10.0.1.254}
+  dc2_lan: {cidr: 10.0.2.0/24,   role: "LAN của DC2 (switch SW2)", docker_gateway: 10.0.2.254}
+  dc3_lan: {cidr: 10.0.3.0/24,   role: "LAN của DC3 (switch SW3)", docker_gateway: 10.0.3.254}
+  wan_14:  {cidr: 10.10.14.0/24, role: "Link WAN r1 <-> r4",       docker_gateway: 10.10.14.254}
+  wan_24:  {cidr: 10.10.24.0/24, role: "Link WAN r2 <-> r4 (đường tới DC2)", docker_gateway: 10.10.24.254}
+  wan_34:  {cidr: 10.10.34.0/24, role: "Link WAN r3 <-> r4 (đường tới DC3)", docker_gateway: 10.10.34.254}
+
+nodes:
+  dc1: {container: dc1, role: "Data Center nguồn", interfaces: {dc1_lan: 10.0.1.2}}
+  dc2: {container: dc2, role: "Data Center đích",  interfaces: {dc2_lan: 10.0.2.2}}
+  dc3: {container: dc3, role: "Data Center đích",  interfaces: {dc3_lan: 10.0.3.2}}
+  r1:  {container: router-r1, role: "Router biên DC1", interfaces: {dc1_lan: 10.0.1.1, wan_14: 10.10.14.1}}
+  r2:  {container: router-r2, role: "Router biên DC2", interfaces: {dc2_lan: 10.0.2.1, wan_24: 10.10.24.2}}
+  r3:  {container: router-r3, role: "Router biên DC3", interfaces: {dc3_lan: 10.0.3.1, wan_34: 10.10.34.3}}
+  r4:  {container: router-r4-firewall, role: "Router trung tâm + Firewall + netem",
+        interfaces: {wan_14: 10.10.14.4, wan_24: 10.10.24.4, wan_34: 10.10.34.4}}
+
+# Bảng định tuyến tĩnh (đích -> next hop). Mọi luồng giữa các DC đều đi qua r4.
+routing:
+  dc1: {10.0.2.0/24: 10.0.1.1, 10.0.3.0/24: 10.0.1.1, 10.10.0.0/16: 10.0.1.1}
+  dc2: {10.0.1.0/24: 10.0.2.1, 10.0.3.0/24: 10.0.2.1, 10.10.0.0/16: 10.0.2.1}
+  dc3: {10.0.1.0/24: 10.0.3.1, 10.0.2.0/24: 10.0.3.1, 10.10.0.0/16: 10.0.3.1}
+  r1:  {10.0.2.0/24: 10.10.14.4, 10.0.3.0/24: 10.10.14.4, 10.10.24.0/24: 10.10.14.4, 10.10.34.0/24: 10.10.14.4}
+  r2:  {10.0.1.0/24: 10.10.24.4, 10.0.3.0/24: 10.10.24.4, 10.10.14.0/24: 10.10.24.4, 10.10.34.0/24: 10.10.24.4}
+  r3:  {10.0.1.0/24: 10.10.34.4, 10.0.2.0/24: 10.10.34.4, 10.10.14.0/24: 10.10.34.4, 10.10.24.0/24: 10.10.34.4}
+  r4:  {10.0.1.0/24: 10.10.14.1, 10.0.2.0/24: 10.10.24.2, 10.0.3.0/24: 10.10.34.3}
+
+# Đường đi đã kiểm chứng bằng traceroute (15/11/2026)
+paths:
+  dc1_to_dc2: [10.0.1.1, 10.10.14.4, 10.10.24.2, 10.0.2.2]   # TTL nhận = 61 (3 router)
+  dc1_to_dc3: [10.0.1.1, 10.10.14.4, 10.10.34.3, 10.0.3.2]
+
+# Firewall trên r4 (chuỗi FORWARD), xét từ trên xuống, khớp luật đầu tiên
+firewall:
+  node: r4
+  default_policy: DROP
+  rules:
+    - {action: ACCEPT, match: "conntrack ESTABLISHED,RELATED"}
+    - {action: ACCEPT, match: "src 10.0.0.0/16 -> dst 10.0.0.0/16 (mọi giao thức giữa các DC)"}
+    - {action: ACCEPT, match: "icmp src 10.0.0.0/8 -> dst 10.0.0.0/8"}
+  app_ports: {workload_socket: 5001, iperf3_probe: 5201}
+  verified: "TCP từ IP WAN r1 (10.10.14.1) tới dc2:5001 bị DROP; từ dc1 thì được phép"
+
+# Giả lập WAN bằng tc netem trên r4 (xem scripts/tc_netem.sh)
+netem:
+  node: r4
+  links: {to_dc2: "card thuộc wan_24", to_dc3: "card thuộc wan_34"}
+  direction: egress   # chỉ chiều gói đi ra khỏi r4 về phía DC đích
+  scenarios:
+    KB1: {to_dc2: none,                                      to_dc3: none}
+    KB2: {to_dc2: "delay 20ms rate 10mbit",                  to_dc3: "delay 10ms rate 100mbit"}
+    KB3: {to_dc2: "delay 150ms 20ms distribution normal loss 0.5%", to_dc3: "delay 20ms"}
+    KB4: {to_dc2: "delay 30ms rate 50mbit",                  to_dc3: "delay 30ms rate 50mbit"}
+    KB5: {to_dc2: "delay 20ms rate 100mbit",                 to_dc3: "delay 20ms rate 100mbit"}
+
+# Số đo nền khi chưa có netem (15/11/2026)
+baseline:
+  rtt_avg_ms: {dc1_to_dc2: 0.392, dc1_to_dc3: 0.870}
+  packet_loss_pct: 0
+  iperf3_dc1_to_dc2_gbps: 28.1
