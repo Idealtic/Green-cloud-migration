@@ -9,7 +9,7 @@ experiment:
   snapshots_per_iteration: 4    # số chu kỳ quyết định trong 1 lần lặp
   strategies: [Proposed, Baseline_A, Baseline_B]
   seed: 42                      # seed cho chế độ mock (tái lập kết quả)
-  sim_start: "2026-06-21T06:00:00+00:00"  # mốc thời gian giả lập đưa vào predict_green_energy
+  sim_start: "2025-05-06T14:00:00+00:00 "  # mốc thời gian giả lập đưa vào predict_green_energy
   sim_step_seconds: 3600        # mỗi chu kỳ tiến 1 giờ giả lập (để thấy nắng/gió đổi)
 
 # Ví dụ khi đã chốt:  netem_cmd: "bash scripts/tc_netem.sh {scenario}"
