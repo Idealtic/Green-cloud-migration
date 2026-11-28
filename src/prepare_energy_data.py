@@ -20,11 +20,18 @@ energy = pd.read_csv(
 )
 
 # 4. Chọn 3 trạm đại diện cho 3 Data Center
+
+# Mapping 3 tram dien thanh 3 Data Center gia lap
+# dc1: DC nguon
+# dc2: DC dich co nguon nang luong xanh thuan loi
+# dc3: DC dich con lai
+
 selected_stations = {
-    "dc1": "SOLIS Station 1",
-    "dc2": "FUSIONSOLAR Station 1",
+    "dc1": "FUSIONSOLAR Station 1",
+    "dc2": "SOLIS Station 1",
     "dc3": "FUSIONSOLAR Station 2"
 }
+
 
 # 5. Hiển thị thông tin của từng trạm
 for dc, station_name in selected_stations.items():
@@ -190,114 +197,76 @@ for dc, station_name in selected_stations.items():
     print(f"  So gia tri vuot dinh muc: {(values > capacity).sum()}")
 
 
-# 22. Kiem tra chi tiet cac gia tri bat thuong cua dc1
 
-dc1_data = filtered_energy[
-    filtered_energy["dc"] == "dc1"
-].copy()
+# =========================================================
+# 22-24. KIEM TRA BAT THUONG TAI SOLIS STATION 1
+# Doc lap voi cach gan ten dc1, dc2, dc3
+# =========================================================
 
-dc1_data = dc1_data.sort_values("measured_ts")
+AUDIT_STATION = "SOLIS Station 1"
 
-# Lay cong suat dinh muc cua dc1 tu devices.csv
-dc1_station_id = next(
-    station_id
-    for station_id, dc in station_id_to_dc.items()
-    if dc == "dc1"
+audit_dc = next(
+    dc for dc, name in selected_stations.items()
+    if name == AUDIT_STATION
 )
 
-dc1_capacity = rated_power.loc[dc1_station_id]
+audit_station_id = stations.loc[
+    stations["name"] == AUDIT_STATION,
+    "station_hash_id"
+].iloc[0]
 
-# Loc cac ban ghi co san luong vuot nguong
-dc1_outliers = dc1_data[
-    dc1_data["total_produced_energy"] > dc1_capacity
+audit_capacity = rated_power.loc[audit_station_id]
+
+audit_data = filtered_energy[
+    filtered_energy["station_hash_id"] == audit_station_id
 ].copy()
 
-print("\n=== KIEM TRA BAT THUONG DC1 ===")
-print("So gia tri vuot nguong:", len(dc1_outliers))
+audit_data = audit_data.sort_values("measured_ts")
 
-# Hien thi 10 gia tri lon nhat
+# Kiem tra gia tri vuot nguong
+audit_outliers = audit_data[
+    audit_data["total_produced_energy"] > audit_capacity
+].copy()
+
+print("\n=== KIEM TRA BAT THUONG SOLIS ===")
+print("Tram:", AUDIT_STATION)
+print("Data Center hien tai:", audit_dc)
+print("Cong suat dinh muc:", audit_capacity)
+print("So gia tri vuot nguong:", len(audit_outliers))
+
 print("\n10 gia tri lon nhat:")
 print(
-    dc1_outliers.nlargest(
+    audit_outliers.nlargest(
         10, "total_produced_energy"
     )[["measured_ts", "total_produced_energy"]]
     .to_string(index=False)
 )
 
-# Thong ke so gia tri bat thuong theo thang
-dc1_outliers["month"] = (
-    dc1_outliers["measured_ts"].dt.to_period("M")
+audit_outliers["month"] = (
+    audit_outliers["measured_ts"].dt.to_period("M")
 )
 
-print("\nSo gia tri bat thuong theo thang:")
-print(dc1_outliers.groupby("month").size())
+print("\nGia tri bat thuong theo thang:")
+print(audit_outliers.groupby("month").size())
 
-# Kiem tra truong hop bat thuong ngay 09/08/2024
-print("\nDu lieu xung quanh 10:00 ngay 09/08/2024:")
+# Kiem tra thoi diem bat thuong
+check_time = "2024-08-09 10:00:00"
 
-sample = dc1_data[
-    dc1_data["measured_ts"].between(
+sample = audit_data[
+    audit_data["measured_ts"].between(
         "2024-08-09 08:00:00",
         "2024-08-09 12:00:00"
     )
 ]
 
+print("\nDu lieu xung quanh thoi diem bat thuong:")
 print(
-    sample[
-        ["measured_ts", "total_produced_energy"]
-    ].to_string(index=False)
+    sample[["measured_ts", "total_produced_energy"]]
+    .to_string(index=False)
 )
 
-
-# 23. Doi chieu gia tri bat thuong voi du lieu inverter
+# Doi chieu voi du lieu inverter
 inverter = pd.read_csv(
-    DATA_DIR / "energy_production_hourly_inverter.csv",
-    usecols=[
-        "device_hash_id",
-        "measured_ts",
-        "total_produced_energy"
-    ]
-)
-
-# Lay danh sach inverter thuoc dc1
-dc1_devices = devices.loc[
-    devices["station_hash_id"] == dc1_station_id,
-    "device_hash_id"
-]
-
-# Kiem tra thoi diem bat thuong
-check_time = "2024-08-09 10:00:00"
-
-inverter_sample = inverter[
-    (inverter["device_hash_id"].isin(dc1_devices)) &
-    (inverter["measured_ts"] == check_time)
-].copy()
-
-inverter_sample = inverter_sample.sort_values(
-    "total_produced_energy",
-    ascending=False
-)
-
-print("\n=== DOI CHIEU DU LIEU CAP INVERTER ===")
-print("Thoi diem:", check_time)
-print("So inverter co ban ghi:", len(inverter_sample))
-
-print(
-    inverter_sample[
-        ["device_hash_id", "total_produced_energy"]
-    ].to_string(index=False)
-)
-
-print(
-    "\nTong san luong inverter:",
-    inverter_sample["total_produced_energy"].sum()
-)
-
-
-# 24. Kiem tra nang luong va cong suat AC
-# cua inverter bat thuong
-
-inverter_detail = pd.read_csv(
     DATA_DIR / "energy_production_hourly_inverter.csv",
     usecols=[
         "device_hash_id",
@@ -307,20 +276,43 @@ inverter_detail = pd.read_csv(
     ]
 )
 
-abnormal_device_id = "2e1392d8173e175e4fa40a27aa555e09"
+audit_devices = devices.loc[
+    devices["station_hash_id"] == audit_station_id,
+    "device_hash_id"
+]
 
-sample_detail = inverter_detail[
-    (inverter_detail["device_hash_id"] == abnormal_device_id)
-    & (
-        inverter_detail["measured_ts"].between(
-            "2024-08-09 08:00:00",
-            "2024-08-09 12:00:00"
-        )
-    )
+inverter_sample = inverter[
+    (inverter["device_hash_id"].isin(audit_devices))
+    & (inverter["measured_ts"] == check_time)
 ].copy()
 
-print("\n=== DOI CHIEU ENERGY VA AC_POWER ===")
+print("\n=== DOI CHIEU CAP INVERTER ===")
+print("So inverter co ban ghi:", len(inverter_sample))
+print(
+    inverter_sample[
+        ["device_hash_id", "total_produced_energy"]
+    ].sort_values(
+        "total_produced_energy", ascending=False
+    ).to_string(index=False)
+)
 
+print(
+    "Tong san luong inverter:",
+    inverter_sample["total_produced_energy"].sum()
+)
+
+# Kiem tra inverter bat thuong da phat hien
+abnormal_device_id = "2e1392d8173e175e4fa40a27aa555e09"
+
+sample_detail = inverter[
+    (inverter["device_hash_id"] == abnormal_device_id)
+    & inverter["measured_ts"].between(
+        "2024-08-09 08:00:00",
+        "2024-08-09 12:00:00"
+    )
+]
+
+print("\n=== DOI CHIEU ENERGY VA AC_POWER ===")
 print(
     sample_detail[
         ["measured_ts", "total_produced_energy", "ac_power"]
@@ -332,7 +324,8 @@ rated_device = devices.loc[
     "max_power"
 ].iloc[0]
 
-print("\nCong suat dinh muc inverter:", rated_device)
+print("Cong suat dinh muc inverter:", rated_device)
+
 
 
 # 25. Tao bang du lieu de xu ly bat thuong

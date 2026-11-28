@@ -28,12 +28,12 @@ st = Settings.load()
 # 3. Chi thay doi thoi gian trong bo nho de test
 # KHONG sua file pipeline_config.yaml cua Chi
 st.pc["experiment"]["sim_start"] = (
-    "2025-05-20T07:00:00+00:00"
+    "2025-05-06T14:00:00+00:00"
 )
 st.pc["experiment"]["sim_step_seconds"] = 3600
 
 # 4. Cau hinh test nho
-OUTPUT_DIR = ROOT / "results" / "ml_integration_candidate"
+OUTPUT_DIR = ROOT / "results" / "ml_integration_remapped"
 
 args = Namespace(
     iterations=1,
